@@ -1,145 +1,97 @@
 class TaskManager {
   constructor() {
-    this.tasks = [];
-    this.init();
-  }
-
-  // Initialize tasks asynchronously
-  async init() {
-    try {
-      const storedTasks = localStorage.getItem("tasks");
-      this.tasks = storedTasks ? JSON.parse(storedTasks) : [];
-    } catch (error) {
-      console.error("Failed to initialize tasks:", error);
-      this.tasks = [];
-    }
+    this.tasks = JSON.parse(localStorage.getItem("tasks")) || [];
   }
 
   // Task Add Function
-  async addTask(title, description, priority) {
-    if (!title?.trim()) {
+  addTask = async (title, description, priority) => {
+    if (!title || title.trim() === "") {
       throw new Error("Task title cannot be empty");
     }
 
     const newTask = {
-      id: Date.now(),
+      id: Date.now().toString(),
       title: title.trim(),
-      description: description?.trim() ?? "",
-      priority,
+      description: description.trim(),
+      priority: priority,
       completed: false,
       createdAt: new Date().toISOString(),
     };
-
-    try {
-      this.tasks = [...this.tasks, newTask];
-      await this.saveTasks();
-      return newTask;
-    } catch (error) {
-      console.error("Failed to add task:", error);
-      throw new Error("Failed to add task");
-    }
-  }
+    this.tasks.push(newTask);
+    this.saveTasks();
+    return newTask;
+  };
 
   // Task Delete Function
-  async deleteTask(taskId) {
-    try {
-      const taskIndex = this.tasks.findIndex((task) => task.id === taskId);
-      if (taskIndex === -1) return false;
-
-      this.tasks = this.tasks.filter((task) => task.id !== taskId);
-      await this.saveTasks();
+  deleteTask = async (taskId) => {
+    const taskIndex = this.tasks.findIndex((task) => task.id === taskId);
+    if (taskIndex !== -1) {
+      this.tasks.splice(taskIndex, 1);
+      this.saveTasks();
       return true;
-    } catch (error) {
-      console.error("Failed to delete task:", error);
-      throw new Error("Failed to delete task");
     }
-  }
+    return false;
+  };
 
   // Task Update Function
-  async updateTask(taskId, updates) {
-    try {
-      const taskToUpdate = this.tasks.find((task) => task.id === taskId);
-      if (!taskToUpdate) throw new Error("Task not found");
-
-      const updatedTask = {
-        ...taskToUpdate,
-        ...Object.fromEntries(
-          Object.entries(updates).filter(([_, value]) => value !== undefined)
-        ),
-      };
-
-      this.tasks = this.tasks.map((task) =>
-        task.id === taskId ? updatedTask : task
-      );
-
-      await this.saveTasks();
-      return updatedTask;
-    } catch (error) {
-      console.error("Failed to update task:", error);
-      throw new Error("Failed to update task");
+  updateTask = async (taskId, updates) => {
+    const taskToUpdate = this.tasks.find((task) => task.id === taskId);
+    if (!taskToUpdate) {
+      throw new Error("Task not found");
     }
-  }
+    Object.keys(updates).forEach((key) => {
+      if (updates[key] !== undefined) {
+        taskToUpdate[key] = updates[key];
+      }
+    });
+    this.saveTasks();
+    return taskToUpdate;
+  };
 
   // Task Completion Toggle Function
-  async toggleTaskCompletion(taskId) {
-    try {
-      const taskIndex = this.tasks.findIndex((task) => task.id === taskId);
-      if (taskIndex === -1) throw new Error("Task not found");
+  toggleTaskCompletion(taskId) {
+    const task = this.tasks.find((task) => task.id === taskId);
 
-      const updatedTask = {
-        ...this.tasks[taskIndex],
-        completed: !this.tasks[taskIndex].completed,
-      };
-
-      this.tasks = this.tasks.map((task) =>
-        task.id === taskId ? updatedTask : task
-      );
-
-      await this.saveTasks();
-      return updatedTask;
-    } catch (error) {
-      console.error("Failed to toggle task completion:", error);
-      throw new Error("Failed to toggle task completion");
+    if (!task) {
+      throw new Error("Task not found");
     }
+
+    task.completed = !task.completed;
+    this.saveTasks();
+
+    return task;
+  }
+  saveTasks() {
+    localStorage.setItem("tasks", JSON.stringify(this.tasks));
   }
 
-  // Save Tasks Function
-  async saveTasks() {
-    try {
-      await new Promise((resolve) => {
-        localStorage.setItem("tasks", JSON.stringify(this.tasks));
-        resolve();
-      });
-    } catch (error) {
-      console.error("Failed to save tasks:", error);
-      throw new Error("Failed to save tasks");
-    }
-  }
-
-  // Task Filter Function - using arrow function and modern array methods
+  // Task Filter Function based on the filter type
   filterTasks = (filterType) => {
-    const filters = {
-      completed: (task) => task.completed,
-      incomplete: (task) => !task.completed,
-      "high-priority": (task) => task.priority === "high",
-      "medium-priority": (task) => task.priority === "medium",
-      "low-priority": (task) => task.priority === "low",
-    };
-
-    return filters[filterType]
-      ? this.tasks.filter(filters[filterType])
-      : this.tasks;
+    switch (filterType) {
+      case "completed":
+        return this.tasks.filter((task) => task.completed);
+      case "incomplete":
+        return this.tasks.filter((task) => !task.completed);
+      case "high-priority":
+        return this.tasks.filter((task) => task.priority === "high");
+      case "medium-priority":
+        return this.tasks.filter((task) => task.priority === "medium");
+      case "low-priority":
+        return this.tasks.filter((task) => task.priority === "low");
+      default:
+        return this.tasks;
+    }
   };
 
-  // Task Search Function - using arrow function and modern string methods
-  searchTasks = (searchTerm = "") => {
+  // Task Search Function
+  searchTasks(searchTerm) {
     const term = searchTerm.toLowerCase();
     return this.tasks.filter(
-      ({ title, description }) =>
-        title.toLowerCase().includes(term) ||
-        description.toLowerCase().includes(term)
+      (task) =>
+        task.title.toLowerCase().includes(term) ||
+        task.description.toLowerCase().includes(term)
     );
-  };
+  }
 }
 
 class TaskManagerUI {
@@ -147,187 +99,237 @@ class TaskManagerUI {
     this.taskManager = taskManager;
     this.taskForm = document.getElementById("taskForm");
     this.taskList = document.getElementById("taskList");
-    this.init();
-  }
-
-  async init() {
     this.createFilterAndSearchUI();
-    this.setupEventListeners();
-    await this.renderTasks();
+    this.taskForm.addEventListener("submit", this.handleAddTask.bind(this));
+    this.taskList.addEventListener("click", this.handleTaskActions.bind(this));
+    this.renderTasks();
   }
 
-  setupEventListeners = () => {
-    this.taskForm?.addEventListener("submit", this.handleAddTask);
-    this.taskList?.addEventListener("click", this.handleTaskActions);
-  };
-
-  createFilterAndSearchUI = () => {
+  // Task Filter and Search UI Creation Function
+  createFilterAndSearchUI() {
     const filterContainer = document.createElement("div");
     filterContainer.innerHTML = `
-      <select id="taskFilter">
-        <option value="">All Tasks</option>
-        <option value="completed">Completed</option>
-        <option value="incomplete">Incomplete</option>
-        <option value="high-priority">High Priority</option>
-        <option value="medium-priority">Medium Priority</option>
-        <option value="low-priority">Low Priority</option>
-      </select>
-      <input type="text" id="taskSearch" placeholder="Search tasks...">
-    `;
-    this.taskList?.parentNode.insertBefore(filterContainer, this.taskList);
+            <select id="taskFilter">
+                <option value="">All Tasks</option>
+                <option value="completed">Completed</option>
+                <option value="incomplete">Incomplete</option>
+                <option value="high-priority">High Priority</option>
+                <option value="medium-priority">Medium Priority</option>
+                <option value="low-priority">Low Priority</option>
+            </select>
+            <input type="text" id="taskSearch" placeholder="Search tasks...">
+        `;
+    this.taskList.parentNode.insertBefore(filterContainer, this.taskList);
 
-    document
-      .getElementById("taskFilter")
-      ?.addEventListener("change", this.handleFilter);
-    document
-      .getElementById("taskSearch")
-      ?.addEventListener("input", this.handleSearch);
-  };
+    const filterSelect = document.getElementById("taskFilter");
+    const searchInput = document.getElementById("taskSearch");
 
-  handleFilter = async (event) => {
+    filterSelect.addEventListener("change", this.handleFilter.bind(this));
+    searchInput.addEventListener("input", this.handleSearch.bind(this));
+  }
+
+  handleFilter(event) {
     const filterType = event.target.value;
     const filteredTasks = this.taskManager.filterTasks(filterType);
-    await this.renderTasks(filteredTasks);
-  };
+    this.renderTasks(filteredTasks);
+  }
 
-  handleSearch = async (event) => {
+  handleSearch(event) {
     const searchTerm = event.target.value;
     const searchResults = this.taskManager.searchTasks(searchTerm);
-    await this.renderTasks(searchResults);
-  };
+    this.renderTasks(searchResults);
+  }
 
-  renderTasks = async (tasksToRender = null) => {
-    if (!this.taskList) return;
-
+  renderTasks(tasksToRender = null) {
     this.taskList.innerHTML = "";
-    const tasks = tasksToRender ?? this.taskManager.tasks;
+    const tasks = tasksToRender || this.taskManager.tasks;
+    tasks.forEach((task) => {
+      const taskElement = this.createTaskElement(task);
+      this.taskList.appendChild(taskElement);
+    });
+  }
 
-    const taskElements = tasks.map(this.createTaskElement);
-    this.taskList.append(...taskElements);
-  };
-
-  createTaskElement = (task) => {
+  createTaskElement(task) {
     const taskDiv = document.createElement("div");
     taskDiv.classList.add("task-item");
-    task.completed && taskDiv.classList.add("task-completed");
+    if (task.completed) {
+      taskDiv.classList.add("task-completed");
+    }
 
     taskDiv.innerHTML = `
-      <div class="task-card">
-        <h3>${task.title}</h3>
-        <p>${task.description}</p>
-        <small>Priority: ${task.priority}</small>
-      </div>
-      <div class="task-actions">
-        <button class="complete-btn" data-id="${task.id}">
-          ${task.completed ? "Undo" : "Complete"}
-        </button>
-        <button class="edit-btn" data-id="${task.id}">Edit</button>
-        <button class="delete-btn" data-id="${task.id}">Delete</button>
-      </div>
-    `;
+            <div class="task-card">
+                <h3>${task.title}</h3>
+                <p>${task.description}</p>
+                <small>Priority: ${task.priority}</small>
+            </div>
+            <div class="task-actions">
+                <button class="complete-btn" data-id="${task.id}">
+                    ${task.completed ? "Undo" : "Complete"}
+                </button>
+                <button class="edit-btn" data-id="${task.id}">Edit</button>
+                <button class="delete-btn" data-id="${task.id}">Delete</button>
+            </div>
+        `;
 
     return taskDiv;
-  };
+  }
 
-  handleAddTask = async (event) => {
+  handleAddTask(event) {
     event.preventDefault();
 
-    const formData = new FormData(event.target);
-    const taskData = Object.fromEntries(formData.entries());
+    const titleInput = document.getElementById("taskTitle");
+    const descriptionInput = document.getElementById("taskDescription");
+    const priorityInput = document.getElementById("taskPriority");
 
     try {
-      await this.taskManager.addTask(
-        taskData.title,
-        taskData.description,
-        taskData.priority
+      this.taskManager.addTask(
+        titleInput.value,
+        descriptionInput.value,
+        priorityInput.value
       );
 
-      event.target.reset();
-      await this.renderTasks();
+      this.taskForm.reset();
+      this.renderTasks();
     } catch (error) {
       alert(error.message);
     }
-  };
+  }
 
-  handleTaskActions = async (event) => {
+  handleTaskActions(event) {
     const target = event.target;
-    const taskId = target.dataset.id;
-    if (!taskId) return;
+    const taskId = target.getAttribute("data-id");
 
-    try {
-      if (target.classList.contains("complete-btn")) {
-        await this.taskManager.toggleTaskCompletion(taskId);
-      } else if (target.classList.contains("delete-btn")) {
-        await this.taskManager.deleteTask(taskId);
-      } else if (target.classList.contains("edit-btn")) {
-        await this.showEditModal(taskId);
-      }
-      await this.renderTasks();
-    } catch (error) {
-      alert(error.message);
+    if (target.classList.contains("complete-btn")) {
+      this.taskManager.toggleTaskCompletion(taskId);
+      this.renderTasks();
     }
-  };
 
-  showEditModal = async (taskId) => {
+    if (target.classList.contains("delete-btn")) {
+      this.taskManager.deleteTask(taskId);
+      this.renderTasks();
+    }
+
+    if (target.classList.contains("edit-btn")) {
+      this.showEditModal(taskId);
+    }
+  }
+
+  showEditModal(taskId) {
     const task = this.taskManager.tasks.find((t) => t.id === taskId);
-    if (!task) return;
 
     const modal = document.createElement("div");
     modal.innerHTML = `
-      <div class="modal">
-        <h2>Edit Task</h2>
-        <form id="editTaskForm">
-          <input type="text" id="editTaskTitle" value="${task.title}" required>
-          <textarea id="editTaskDescription">${task.description}</textarea>
-          <select id="editTaskPriority">
-            ${["low", "medium", "high"]
-              .map(
-                (priority) => `
-              <option value="${priority}" ${
-                  task.priority === priority ? "selected" : ""
-                }>
-                ${priority.charAt(0).toUpperCase() + priority.slice(1)} Priority
-              </option>
-            `
-              )
-              .join("")}
-          </select>
-          <button type="submit">Save Changes</button>
-          <button type="button" id="cancelEdit">Cancel</button>
-        </form>
-      </div>
-    `;
+            <div class="modal">
+                <h2>Edit Task</h2>
+                <form id="editTaskForm">
+                    <input type="text" id="editTaskTitle" value="${
+                      task.title
+                    }" required>
+                    <textarea id="editTaskDescription">${
+                      task.description
+                    }</textarea>
+                    <select id="editTaskPriority">
+                        <option value="low" ${
+                          task.priority === "low" ? "selected" : ""
+                        }>Low Priority</option>
+                        <option value="medium" ${
+                          task.priority === "medium" ? "selected" : ""
+                        }>Medium Priority</option>
+                        <option value="high" ${
+                          task.priority === "high" ? "selected" : ""
+                        }>High Priority</option>
+                    </select>
+                    <button type="submit">Save Changes</button>
+                    <button type="button" id="cancelEdit">Cancel</button>
+                </form>
+            </div>
+        `;
 
     document.body.appendChild(modal);
 
     const editForm = document.getElementById("editTaskForm");
-    const handleSubmit = async (e) => {
+    editForm.addEventListener("submit", (e) => {
       e.preventDefault();
 
-      try {
-        await this.taskManager.updateTask(taskId, {
-          title: document.getElementById("editTaskTitle").value,
-          description: document.getElementById("editTaskDescription").value,
-          priority: document.getElementById("editTaskPriority").value,
-        });
+      const updatedTitle = document.getElementById("editTaskTitle").value;
+      const updatedDescription = document.getElementById(
+        "editTaskDescription"
+      ).value;
+      const updatedPriority = document.getElementById("editTaskPriority").value;
 
-        document.body.removeChild(modal);
-        await this.renderTasks();
-      } catch (error) {
-        alert(error.message);
-      }
-    };
+      this.taskManager.updateTask(taskId, {
+        title: updatedTitle,
+        description: updatedDescription,
+        priority: updatedPriority,
+      });
 
-    editForm?.addEventListener("submit", handleSubmit);
-    document.getElementById("cancelEdit")?.addEventListener("click", () => {
+      document.body.removeChild(modal);
+      this.renderTasks();
+    });
+
+    document.getElementById("cancelEdit").addEventListener("click", () => {
       document.body.removeChild(modal);
     });
-  };
+  }
 }
 
-// Initialize the application
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", () => {
   const taskManager = new TaskManager();
-  await taskManager.init();
   new TaskManagerUI(taskManager);
 });
+
+const modalStyle = document.createElement("style");
+modalStyle.textContent = `
+    .modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-width: 500px;
+    }
+    .modal h2 {
+        margin: 0;
+        padding: 0;
+        font-size: 1.2em;
+        width: 100%;
+        text-align: center;
+    }
+    .modal form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-width: 500px;
+        padding: 10px;
+    }
+    .modal form input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+    .modal form textarea {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+    .modal select {
+        width: 100%;
+        height: 40px;
+        padding: 10px;
+        border: 1px solid #ccc;
+    }
+    .modal button {
+        padding: 10px;
+
+    }
+`;
+document.head.appendChild(modalStyle);
